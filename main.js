@@ -115,6 +115,13 @@ const dyingEnemies = [];
 // Добавляем массив для хранения вражеских снарядов
 const enemyBullets = [];
 
+// Добавляем массив для хранения гаечных ключей
+const wrenches = [];
+
+// Загружаем изображение ключа
+const wrenchImg = new Image();
+wrenchImg.src = 'key.png';
+
 // Функция для создания вспышки
 function createMuzzleFlash(x, y, angle) {
     muzzleFlashes.push({
@@ -754,6 +761,7 @@ function restartGame() {
     smokeParticles.length = 0;
     explosionParticles.length = 0;
     dyingEnemies.length = 0;
+    wrenches.length = 0;
     
     // Сбрасываем счет
     score = 0;
@@ -1190,7 +1198,61 @@ function updateDyingEnemies() {
     }
 }
 
-// Модифицируем функцию проверки столкновений
+// Функция для создания гаечного ключа
+function createWrench(x, y) {
+    wrenches.push({
+        x: x,
+        y: y,
+        size: 35,
+        floatOffset: 0,
+        floatSpeed: 0.05
+    });
+}
+
+// Функция для обновления и отрисовки гаечных ключей
+function updateWrenches() {
+    for (let i = wrenches.length - 1; i >= 0; i--) {
+        const wrench = wrenches[i];
+        
+        // Анимация парения
+        wrench.floatOffset += wrench.floatSpeed;
+        
+        // Проверяем столкновение с игроком
+        if (!player.isDestroyed && 
+            Math.abs(wrench.x - player.x) < player.width/2 + wrench.size &&
+            Math.abs(wrench.y - player.y) < player.height/2 + wrench.size) {
+            player.health = Math.min(player.maxHealth, player.health + 20);
+            createPlayerDamage();
+            for (let j = 0; j < 8; j++) {
+                const angle = (Math.PI * 2 * j / 8);
+                const speed = 2;
+                explosionParticles.push({
+                    x: wrench.x,
+                    y: wrench.y,
+                    size: 3,
+                    speedX: Math.cos(angle) * speed,
+                    speedY: Math.sin(angle) * speed,
+                    life: 20,
+                    alpha: 1,
+                    type: 'spark'
+                });
+            }
+            wrenches.splice(i, 1);
+            continue;
+        }
+        
+        // --- Рисуем ключ как картинку ---
+        ctx.save();
+        ctx.translate(wrench.x, wrench.y + Math.sin(wrench.floatOffset) * 5);
+        const imgSize = wrench.size * 1.5;
+        if (wrenchImg.complete && wrenchImg.naturalWidth > 0) {
+            ctx.drawImage(wrenchImg, -imgSize/2, -imgSize/2, imgSize, imgSize);
+        }
+        ctx.restore();
+    }
+}
+
+// Модифицируем функцию checkBulletEnemyCollisions для создания гаечных ключей
 function checkBulletEnemyCollisions() {
     for (let i = enemies.length - 1; i >= 0; i--) {
         const e = enemies[i];
@@ -1200,8 +1262,14 @@ function checkBulletEnemyCollisions() {
                 b.x > e.x - e.width/2 && b.x < e.x + e.width/2 &&
                 b.y > e.y - e.height/2 && b.y < e.y + e.height/2
             ) {
-                // Создаем эффект уничтожения вместо мгновенного взрыва
+                // Создаем эффект уничтожения
                 createDyingEffect(e);
+                
+                // С вероятностью 10% создаем гаечный ключ
+                if (Math.random() < 0.1) {
+                    createWrench(e.x, e.y);
+                }
+                
                 enemies.splice(i, 1);
                 bullets.splice(j, 1);
                 score++;
@@ -1234,6 +1302,7 @@ function gameLoop() {
     drawEnemyBullets();
     drawEnemies();
     updateDyingEnemies();
+    updateWrenches(); // Добавляем обновление гаечных ключей
     drawCrosshair(mouse.x, mouse.y);
     drawScore();
     drawHealthBar();
