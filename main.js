@@ -122,6 +122,9 @@ const wrenches = [];
 const wrenchImg = new Image();
 wrenchImg.src = 'key.png';
 
+// Массив для частиц дыма от поврежденного танка
+const playerSmokeParticles = [];
+
 // Функция для создания вспышки
 function createMuzzleFlash(x, y, angle) {
     muzzleFlashes.push({
@@ -275,7 +278,10 @@ function updatePlayer() {
         return; // Если танк уничтожен, не обновляем его позицию
     }
 
-    const speed = 3;
+    // Уменьшаем скорость на 40% при здоровье <= 20%
+    const baseSpeed = 3;
+    const speed = player.health / player.maxHealth <= 0.2 ? baseSpeed * 0.6 : baseSpeed;
+    
     let dx = 0, dy = 0;
     if (keys['w'] || keys['ц'] || keys['arrowup']) dy -= 1;
     if (keys['s'] || keys['ы'] || keys['arrowdown']) dy += 1;
@@ -443,6 +449,7 @@ function drawCrack(ctx, startX, startY, endX, endY, segments = 5, bounds = null)
 
 // Модифицируем функцию drawPlayer для отображения повреждений
 function drawPlayer() {
+    // Теперь рисуем сам танк
     ctx.save();
     ctx.translate(player.x, player.y);
     ctx.rotate(playerAngle);
@@ -578,13 +585,6 @@ function drawPlayer() {
     roundRect(ctx, -player.width/2, -player.height/2, player.width, player.height, 12);
     ctx.fill();
 
-    // Добавляем визуальные повреждения в зависимости от уровня
-    if (damageLevel >= 0) { // Целый танк
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-        roundRect(ctx, -player.width/2 + 5, -player.height/2 + 5, player.width - 10, player.height - 10, 8);
-        ctx.fill();
-    }
-    
     // Отрисовываем сохраненные повреждения
     for (const damage of player.damage) {
         ctx.save();
@@ -1302,13 +1302,61 @@ function gameLoop() {
     drawEnemyBullets();
     drawEnemies();
     updateDyingEnemies();
-    updateWrenches(); // Добавляем обновление гаечных ключей
+    updateWrenches();
     drawCrosshair(mouse.x, mouse.y);
     drawScore();
     drawHealthBar();
     updateMuzzleFlashes();
     updateSmoke();
     updateExplosion();
+    
+    // Рисуем дым поверх всего
+    if (player.health / player.maxHealth <= 0.4 && !player.isDestroyed) {
+        // Добавляем новые частицы дыма
+        if (playerSmokeParticles.length < 20) {
+            for (let i = 0; i < 2; i++) {
+                // Определяем тип дыма в зависимости от здоровья
+                const isHeavySmoke = player.health / player.maxHealth <= 0.2;
+                // Создаем дым в центре танка
+                playerSmokeParticles.push({
+                    x: player.x,
+                    y: player.y,
+                    size: isHeavySmoke ? 10 + Math.random() * 6 : 7 + Math.random() * 5,
+                    alpha: isHeavySmoke ? 0.6 + Math.random() * 0.3 : 0.3 + Math.random() * 0.2,
+                    speedY: isHeavySmoke ? -0.7 - Math.random() * 0.4 : -0.5 - Math.random() * 0.3,
+                    life: isHeavySmoke ? 50 + Math.random() * 30 : 40 + Math.random() * 20,
+                    isHeavy: isHeavySmoke
+                });
+            }
+        }
+        
+        // Обновляем и рисуем частицы
+        for (let i = playerSmokeParticles.length - 1; i >= 0; i--) {
+            const p = playerSmokeParticles[i];
+            // Дым поднимается строго вверх
+            p.y += p.speedY;
+            p.size *= 1.01;
+            p.alpha *= 0.97;
+            p.life--;
+            
+            // Рисуем дым
+            ctx.save();
+            ctx.globalAlpha = p.alpha;
+            ctx.fillStyle = p.isHeavy ? 'rgba(20,20,20,0.95)' : 'rgba(50,50,50,0.8)';
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            
+            if (p.life <= 0 || p.alpha < 0.05) {
+                playerSmokeParticles.splice(i, 1);
+            }
+        }
+    } else {
+        // Если здоровье выше 40%, очищаем дым
+        playerSmokeParticles.length = 0;
+    }
+    
     requestAnimationFrame(gameLoop);
 }
 
